@@ -437,6 +437,80 @@ button.ghost{background:transparent;width:100%}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+/* ---------- Online play ----------
+   The multiplayer code below was written for a shared-room API (room.presence / room.emit / room.on / room.onPeers).
+   Where that API does not exist, this provides it on Supabase Realtime, so everyone with the page open shares one sky.
+   The URL and key are the project's public (publishable) ones, safe to ship. Add ?room=NAME to the address for a private sky.
+   If the library or the network is missing, nothing is defined and the page is the normal single-player game. */
+(() => {
+  if (window.claude && window.claude.use) return;
+  const SB_URL = 'https://zihmupgidfnxngtwddrb.supabase.co', SB_KEY = 'sb_publishable_oAb1o8t1s2Mi2zbbfVTfJQ_Io4bTa45';
+  const POS_MS = 125, STALE_MS = 9000;   // position updates 8 times a second; a pilot unheard for 9 s is dropped
+  let roomName = 'sky';
+  try { const r = new URLSearchParams(location.search).get('room'); if (r) roomName = r.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 24) || 'sky'; } catch (e) { }
+  const me = (() => { try { const a = new Uint8Array(6); crypto.getRandomValues(a); return Array.from(a, b => b.toString(16).padStart(2, '0')).join(''); } catch (e) { return Math.random().toString(16).slice(2, 14); } })();
+  const peers = new Map();                 // peer id -> { presence, last }
+  const peerCbs = [], topicCbs = new Map();
+  let ch = null, ready = false, latest = null, lastSent = 0, sendTimer = 0, roomPromise = null;
+  const entry = (id, p) => ({ peer: id, kind: 'viewer', sameTab: id === me, presence: p.presence || {} });
+  const fire = (joined, updated, left) => {
+    const all = [{ peer: me, kind: 'viewer', sameTab: true, presence: {} }, ...[...peers].map(([id, p]) => entry(id, p))];
+    for (const cb of peerCbs) { try { cb({ peers: all, joined, updated, left }); } catch (e) { console.error(e); } }
+  };
+  const seen = (id, presence) => {
+    if (!id || id === me || typeof id !== 'string' || id.length > 40) return;
+    const p = peers.get(id);
+    if (p) { p.last = Date.now(); if (presence) { p.presence = presence; fire([], [entry(id, p)], []); } }
+    else { const n = { presence: presence || {}, last: Date.now() }; peers.set(id, n); fire([entry(id, n)], [], []); }
+  };
+  const drop = id => { const p = peers.get(id); if (!p) return; peers.delete(id); fire([], [], [entry(id, p)]); };
+  function connect() {
+    if (roomPromise) return roomPromise;
+    roomPromise = new Promise(resolve => {
+      if (!window.supabase || !window.supabase.createClient) { resolve(null); return; }
+      let sb;
+      try { sb = window.supabase.createClient(SB_URL, SB_KEY, { realtime: { params: { eventsPerSecond: 30 } } }); } catch (e) { resolve(null); return; }
+      ch = sb.channel('afterburn-' + roomName, { config: { broadcast: { self: false, ack: false }, presence: { key: me } } });
+      ch.on('broadcast', { event: 'p' }, m => { const d = m && m.payload; if (d && d.peer !== me) seen(d.peer, d.d && typeof d.d === 'object' ? d.d : null); });
+      ch.on('broadcast', { event: 'm' }, m => {
+        const d = m && m.payload; if (!d || d.peer === me || typeof d.topic !== 'string') return; seen(d.peer, null);
+        for (const cb of topicCbs.get(d.topic) || []) { try { cb({ data: d.data, peer: d.peer, sameTab: false }); } catch (e) { console.error(e); } }
+      });
+      ch.on('presence', { event: 'sync' }, () => {
+        const keys = new Set(Object.keys(ch.presenceState())); keys.delete(me);
+        const joined = [], left = [];
+        for (const k of keys) { const p = peers.get(k); if (p) p.viaPres = true; else { const n = { presence: {}, last: Date.now(), viaPres: true }; peers.set(k, n); joined.push(entry(k, n)); } }
+        for (const [k, p] of [...peers]) if (!keys.has(k) && p.viaPres) { peers.delete(k); left.push(entry(k, p)); } // listed before, gone now: they left
+        fire(joined, [], left);
+      });
+      ch.subscribe(status => {
+        if (status === 'SUBSCRIBED') { ready = true; ch.track({ t: Date.now() }).catch(() => { }); fire([], [], []); }
+        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') ready = false;
+      });
+      setInterval(() => { const now = Date.now(); for (const [k, p] of [...peers]) if (now - p.last > STALE_MS) drop(k); }, 3000);
+      resolve({
+        emit(topic, data) { // a one-off event (hit, msl, down) to everyone in the sky
+          if (!ready) return Promise.resolve();
+          return ch.send({ type: 'broadcast', event: 'm', payload: { peer: me, topic: String(topic), data } }).then(r => { if (r !== 'ok' && r !== undefined) throw { code: 'send_failed' }; });
+        },
+        presence(obj) { // this pilot's state, sent at most 8 times a second
+          latest = obj; if (!ready) return Promise.resolve();
+          const wait = POS_MS - (Date.now() - lastSent);
+          const send = () => { sendTimer = 0; if (!ready || !latest) return; lastSent = Date.now(); const d = latest; latest = null; ch.send({ type: 'broadcast', event: 'p', payload: { peer: me, d } }).catch(() => { }); };
+          if (wait <= 0) send(); else if (!sendTimer) sendTimer = setTimeout(send, wait);
+          return Promise.resolve();
+        },
+        onPeers(cb) { peerCbs.push(cb); if (ready) fire([], [], []); return () => { const i = peerCbs.indexOf(cb); if (i >= 0) peerCbs.splice(i, 1); }; },
+        on(topic, cb) { (topicCbs.get(topic) || topicCbs.set(topic, []).get(topic)).push(cb); return () => { const l = topicCbs.get(topic) || [], i = l.indexOf(cb); if (i >= 0) l.splice(i, 1); }; },
+      });
+    });
+    return roomPromise;
+  }
+  window.claude = { use: async name => name === 'room' ? connect() : null };
+})();
+</script>
 <script>
 (() => {
 'use strict';
