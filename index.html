@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Afterburn - Download</title>
+<style>
+  :root { --bg:#0b0f14; --panel:#121923; --ink:#e8eef5; --muted:#8a99ab; --amber:#ffb020; --line:#243142; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f3f5f8; --panel:#ffffff; --ink:#111820; --muted:#566475; --amber:#c47a00; --line:#d5dce6; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; padding:24px 16px;
+         background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { width:100%; max-width:560px; background:var(--panel); border:1px solid var(--line);
+         border-radius:14px; padding:32px 28px; }
+  h1 { margin:0 0 4px; font-size:2.4rem; letter-spacing:.04em; text-transform:uppercase; }
+  .tag { margin:0 0 20px; color:var(--amber); font-weight:600; letter-spacing:.08em; text-transform:uppercase; font-size:.8rem; }
+  p { line-height:1.55; color:var(--muted); margin:0 0 14px; }
+  .buttons { display:flex; flex-wrap:wrap; gap:12px; margin:24px 0 8px; }
+  a.btn { display:inline-block; padding:12px 22px; border-radius:8px; font-weight:700; text-decoration:none; }
+  a.primary { background:var(--amber); color:#111; }
+  a.secondary { border:1px solid var(--line); color:var(--ink); }
+  a.btn:focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
+  small { color:var(--muted); }
+  ol { color:var(--muted); line-height:1.6; padding-left:20px; margin:8px 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Afterburn</h1>
+  <p class="tag">3D jet combat in your browser</p>
+  <p>Fly a fighter jet, take down your targets, then land on the runway and stop to rearm. If you get shot down, fight on foot with the rifle. Aim with the mouse.</p>
+
+  <div class="buttons">
+    <a class="btn primary" href="afterburn.html" download="Afterburn.html">Download game</a>
+    <a class="btn secondary" href="afterburn.html">Play now</a>
+  </div>
+  <small>Single file, about 0.8 MB. Needs a modern browser.</small>
+
+  <p style="margin-top:22px"><strong style="color:var(--ink)">How to run the download</strong></p>
+  <ol>
+    <li>Click <em>Download game</em>.</li>
+    <li>Find <code>Afterburn.html</code> in your Downloads folder.</li>
+    <li>Double-click it to open it in your browser and play.</li>
+  </ol>
+</main>
+</body>
+</html>
